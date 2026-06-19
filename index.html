@@ -123,7 +123,7 @@ body { background: #000; overflow: hidden; font-family: 'Courier New', monospace
   <div class="hud-box">
     <div id="hud-keys">🗝 Keys: 0 / 6</div>
     <div id="hud-floor">📍 Room: 1 / 6</div>
-    <div id="hud-hp">❤️ HP: 6 / 6</div>
+    <div id="hud-hp">❤️ HP: 5 / 5</div>
     <div id="hud-room" style="color:#aaa;font-size:11px;"></div>
   </div>
   <div class="hud-box" style="font-size:11px;line-height:1.9;max-width:190px;">
@@ -192,7 +192,7 @@ let gameStarted = false;
 let floor = 1;
 const TOTAL_FLOORS = 6;
 let keys = new Array(TOTAL_FLOORS).fill(false);
-let hp = 6, maxHp = 6;
+let hp = 5, maxHp = 5;
 let dead = false, won = false;
 let puzzleSolved = new Array(TOTAL_FLOORS).fill(false);
 let cluesFound = {};
