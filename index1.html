@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Escape Room — 6 Floors</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+#canvas { display: block; }
+#hud {
+  position: fixed; top: 0; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 10px 14px; pointer-events: none; z-index: 10;
+}
+.hud-box {
+  background: rgba(0,0,0,0.78);
+  border: 1px solid rgba(120,160,255,0.25);
+  border-radius: 8px; padding: 7px 13px; color: #fff; font-size: 12px; line-height: 1.9;
+}
+.hud-box b { color: #88aaff; }
+#crosshair {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  width: 18px; height: 18px; pointer-events: none; z-index: 10;
+}
+#crosshair::before,#crosshair::after {
+  content:''; position:absolute; background:rgba(255,255,255,0.75);
+}
+#crosshair::before { width:2px; height:100%; left:50%; transform:translateX(-50%); }
+#crosshair::after  { height:2px; width:100%; top:50%;  transform:translateY(-50%); }
+#msg {
+  position:fixed; bottom:76px; left:50%; transform:translateX(-50%);
+  background:rgba(0,0,0,0.82); border:1px solid rgba(255,255,255,0.18);
+  color:#fff; padding:9px 20px; border-radius:8px;
+  font-size:13px; pointer-events:none; z-index:10;
+  transition:opacity 0.4s; opacity:0; white-space:nowrap;
+}
+#interact-hint {
+  position:fixed; bottom:26px; left:50%; transform:translateX(-50%);
+  background:rgba(0,0,0,0.72); border:1px solid rgba(100,220,120,0.4);
+  color:#aaffaa; padding:7px 18px; border-radius:8px;
+  font-size:12px; pointer-events:none; z-index:10; display:none;
+}
+#minimap {
+  position:fixed; bottom:14px; right:14px;
+  background:rgba(0,0,0,0.7); border:1px solid rgba(255,255,255,0.15);
+  border-radius:8px; padding:8px 10px; color:#aaa; font-size:11px;
+  pointer-events:none; z-index:10; line-height:1.7;
+}
+#minimap .fl { display:flex; align-items:center; gap:6px; }
+#minimap .dot { width:8px; height:8px; border-radius:50%; background:#333; border:1px solid #555; }
+#minimap .dot.active { background:#88aaff; border-color:#88aaff; }
+#minimap .dot.done { background:#44cc44; border-color:#44cc44; }
+#overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.92);
+  z-index:20; display:flex; align-items:center; justify-content:center;
+  flex-direction:column; color:#fff; font-family:'Courier New',monospace;
+}
+#overlay .icon { font-size:56px; margin-bottom:10px; }
+#overlay h1 { font-size:34px; margin-bottom:6px; letter-spacing:2px; }
+#overlay .sub { color:#888; margin-bottom:6px; font-size:13px; }
+#overlay .story { color:#aaa; font-size:12px; max-width:400px; text-align:center; line-height:1.7; margin-bottom:22px; }
+#overlay button {
+  padding:11px 30px; font-size:14px; border-radius:8px;
+  background:#223; color:#aaccff; border:1px solid #446; cursor:pointer;
+  font-family:'Courier New',monospace; letter-spacing:1px;
+}
+#overlay button:hover { background:#334; }
+#puzzle-modal {
+  position:fixed; inset:0; background:rgba(0,0,0,0.85);
+  z-index:30; display:none; align-items:center; justify-content:center;
+}
+.puzzle-box {
+  background:#0c0c1e; border:1px solid #336;
+  border-radius:12px; padding:26px; max-width:370px; width:92%; color:#fff;
+}
+.puzzle-box h2 { font-size:16px; color:#88aaff; margin-bottom:9px; }
+.puzzle-box .pdesc { font-size:12px; color:#bbb; line-height:1.65; margin-bottom:14px; white-space:pre-line; }
+.puzzle-box input[type=text] {
+  width:100%; padding:10px; border-radius:7px;
+  border:1px solid #446; background:#111; color:#fff;
+  font-size:20px; text-align:center; font-family:'Courier New',monospace;
+}
+.seq-btns { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:6px; }
+.seq-btn {
+  width:50px; height:50px; border-radius:50%; border:2px solid;
+  cursor:pointer; font-size:20px; display:flex; align-items:center; justify-content:center;
+  background:transparent;
+}
+.math-opts { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:6px; }
+.math-opt {
+  padding:10px; border-radius:7px; border:1px solid #446;
+  background:#111; color:#ccc; cursor:pointer; font-family:'Courier New',monospace;
+  font-size:14px; text-align:center;
+}
+.math-opt:hover { background:#1a1a3a; border-color:#66aaff; }
+.math-opt.selected { background:#1a2a55; border-color:#88aaff; color:#fff; }
+.btn-row { display:flex; gap:10px; margin-top:14px; }
+.btn-submit {
+  flex:1; padding:9px; border-radius:7px;
+  background:#224499; color:#fff; border:none; cursor:pointer;
+  font-size:13px; font-family:'Courier New',monospace;
+}
+.btn-submit:hover { background:#2255aa; }
+.btn-cancel {
+  padding:9px 14px; border-radius:7px;
+  background:#1a1a1a; color:#777; border:1px solid #333; cursor:pointer;
+  font-size:13px; font-family:'Courier New',monospace;
+}
+#puzzle-feedback { margin-top:9px; font-size:12px; min-height:16px; }
+#seq-disp { text-align:center; font-size:20px; letter-spacing:4px; margin-top:8px; color:#999; }
+.slider-wrap { display:flex; flex-direction:column; gap:8px; }
+.slider-row { display:flex; align-items:center; gap:10px; font-size:13px; }
+.slider-row label { color:#aaa; width:60px; }
+.slider-row input[type=range] { flex:1; }
+.slider-row span { width:28px; text-align:right; color:#fff; }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+  <div class="hud-box">
+    <div id="hud-keys">🗝 Keys: 0 / 6</div>
+    <div id="hud-floor">📍 Room: 1 / 6</div>
+    <div id="hud-hp">❤️ HP: 5 / 5</div>
+    <div id="hud-room" style="color:#aaa;font-size:11px;"></div>
+  </div>
+  <div class="hud-box" style="font-size:11px;line-height:1.9;max-width:190px;">
+    <b>Controls</b><br>
+    WASD / Arrows — Move<br>
+    Click + Drag — Look<br>
+    E — Interact<br>
+    Collect 6 keys → EXIT
+  </div>
+</div>
+
+<div id="crosshair"></div>
+<div id="msg"></div>
+<div id="interact-hint">Press E to interact</div>
+
+<div id="minimap">
+  <div style="color:#666;font-size:10px;margin-bottom:4px;">ROOMS</div>
+</div>
+
+<div id="puzzle-modal">
+  <div class="puzzle-box">
+    <h2 id="p-title"></h2>
+    <div class="pdesc" id="p-desc"></div>
+    <div id="p-content"></div>
+    <div class="btn-row">
+      <button class="btn-submit" id="p-submit">Submit</button>
+      <button class="btn-cancel" onclick="closePuzzle()">Cancel</button>
+    </div>
+    <div id="puzzle-feedback"></div>
+  </div>
+</div>
+
+<div id="overlay">
+  <div class="icon">🔒</div>
+  <h1>ESCAPE ROOM</h1>
+  <div class="sub">6 rooms · 6 puzzles · deadly traps</div>
+  <div class="story">
+    You wake up in a dungeon with no memory of how you got here.<br>
+    Six cursed rooms stand between you and freedom.<br>
+    Each room holds a key — solve its puzzle to claim it.<br>
+    Beware the traps. Collect all 6 keys, then find the EXIT.
+  </div>
+  <button onclick="startGame()">▶ Begin Escape</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ===================== RENDERER =====================
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(80, innerWidth/innerHeight, 0.1, 60);
+
+window.addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+// ===================== STATE =====================
+let gameStarted = false;
+let floor = 1;
+const TOTAL_FLOORS = 6;
+let keys = new Array(TOTAL_FLOORS).fill(false);
+let hp = 5, maxHp = 5;
+let dead = false, won = false;
+let puzzleSolved = new Array(TOTAL_FLOORS).fill(false);
+let cluesFound = {};
+let seqInput = '';
+let mathSelected = null;
+let sliderValues = {};
+let activePuzzle = null;
+let nearbyInteractable = null;
+
+// ===================== INPUT =====================
+const moveState = {w:0,s:0,a:0,d:0};
+let yaw=0, pitch=0, mouseDown=false, lastMX=0, lastMY=0;
+
+document.addEventListener('keydown', e => {
+  if(e.key==='w'||e.key==='ArrowUp')    moveState.w=1;
+  if(e.key==='s'||e.key==='ArrowDown')  moveState.s=1;
+  if(e.key==='a'||e.key==='ArrowLeft')  moveState.a=1;
+  if(e.key==='d'||e.key==='ArrowRight') moveState.d=1;
+  if((e.key==='e'||e.key==='E') && gameStarted && !activePuzzle) interact();
+});
+document.addEventListener('keyup', e => {
+  if(e.key==='w'||e.key==='ArrowUp')    moveState.w=0;
+  if(e.key==='s'||e.key==='ArrowDown')  moveState.s=0;
+  if(e.key==='a'||e.key==='ArrowLeft')  moveState.a=0;
+  if(e.key==='d'||e.key==='ArrowRight') moveState.d=0;
+});
+canvas.addEventListener('mousedown', e => { mouseDown=true; lastMX=e.clientX; lastMY=e.clientY; });
+document.addEventListener('mouseup',  () => mouseDown=false);
+document.addEventListener('mousemove', e => {
+  if(!mouseDown||!gameStarted) return;
+  yaw  -= (e.clientX-lastMX)*0.003;
+  pitch -= (e.clientY-lastMY)*0.002;
+  pitch = Math.max(-1.1, Math.min(1.1, pitch));
+  lastMX=e.clientX; lastMY=e.clientY;
+});
+canvas.addEventListener('touchstart', e => {
+  const t=e.touches[0]; mouseDown=true; lastMX=t.clientX; lastMY=t.clientY;
+},{passive:true});
+document.addEventListener('touchend', ()=>mouseDown=false);
+document.addEventListener('touchmove', e=>{
+  if(!mouseDown||!gameStarted) return;
+  const t=e.touches[0];
+  yaw  -= (t.clientX-lastMX)*0.004;
+  pitch -= (t.clientY-lastMY)*0.003;
+  pitch = Math.max(-1.1, Math.min(1.1, pitch));
+  lastMX=t.clientX; lastMY=t.clientY;
+},{passive:true});
+
+// ===================== MESH HELPERS =====================
+function box(w,h,d,col,em=0,eI=0,rough=0.8) {
+  return new THREE.Mesh(
+    new THREE.BoxGeometry(w,h,d),
+    new THREE.MeshStandardMaterial({color:col,emissive:em,emissiveIntensity:eI,roughness:rough,metalness:0.1})
+  );
+}
+function sphere(r,col,em=0,eI=0) {
+  return new THREE.Mesh(
+    new THREE.SphereGeometry(r,16,16),
+    new THREE.MeshStandardMaterial({color:col,emissive:em,emissiveIntensity:eI,roughness:0.4,metalness:0.7})
+  );
+}
+function cyl(r,h,col,em=0,eI=0) {
+  return new THREE.Mesh(
+    new THREE.CylinderGeometry(r,r,h,24),
+    new THREE.MeshStandardMaterial({color:col,emissive:em,emissiveIntensity:eI,roughness:0.5})
+  );
+}
+function cone(r,h,col,em=0,eI=0) {
+  return new THREE.Mesh(
+    new THREE.ConeGeometry(r,h,12),
+    new THREE.MeshStandardMaterial({color:col,emissive:em,emissiveIntensity:eI,roughness:0.5})
+  );
+}
+
+// ===================== ROOM BUILDER =====================
+const floorGroups = [];
+const interactables = []; // {mesh, fi, action, id, label}
+const traps = [];          // {mesh, fi, radius, color}
+const animMeshes = [];     // {mesh, type, fi, id}
+
+const ROOM_CONFIGS = [
+  // fi=0: Dungeon — blue stone
+  {name:'The Dungeon',    wallCol:0x111133, floorCol:0x0d0d22, ceilCol:0x090916, fogCol:0x000010, fogNear:5,  fogFar:20, ambCol:0x112244, ambInt:0.4, lightCol:0x4466ff, lightInt:1.2},
+  // fi=1: Lava Cavern — orange
+  {name:'Lava Cavern',    wallCol:0x1e0a00, floorCol:0x130500, ceilCol:0x0d0300, fogCol:0x0a0200, fogNear:4,  fogFar:18, ambCol:0x441100, ambInt:0.5, lightCol:0xff6600, lightInt:1.3},
+  // fi=2: Ice Prison — cyan
+  {name:'Ice Prison',     wallCol:0x091a2a, floorCol:0x071520, ceilCol:0x050f18, fogCol:0x000510, fogNear:6,  fogFar:22, ambCol:0x0a2233, ambInt:0.5, lightCol:0x44ccff, lightInt:1.1},
+  // fi=3: Poison Lab — green
+  {name:'Poison Lab',     wallCol:0x081808, floorCol:0x051005, ceilCol:0x030a03, fogCol:0x000500, fogNear:5,  fogFar:19, ambCol:0x0a2a0a, ambInt:0.4, lightCol:0x33ff66, lightInt:1.0},
+  // fi=4: Haunted Library — purple
+  {name:'Haunted Library',wallCol:0x130a1e, floorCol:0x0d0617, ceilCol:0x080410, fogCol:0x050008, fogNear:5,  fogFar:20, ambCol:0x1a0a33, ambInt:0.4, lightCol:0xaa44ff, lightInt:1.1},
+  // fi=5: Final Chamber — crimson
+  {name:'Final Chamber',  wallCol:0x1e0505, floorCol:0x140303, ceilCol:0x0e0202, fogCol:0x060000, fogNear:4,  fogFar:18, ambCol:0x330a0a, ambInt:0.5, lightCol:0xff2244, lightInt:1.2},
+];
+
+function buildBaseRoom(fi) {
+  const cfg = ROOM_CONFIGS[fi];
+  const fy = fi * 5;
+  const g = new THREE.Group();
+  g.visible = false;
+
+  scene.fog = null; // will set on floor switch
+
+  const fl = box(12,0.2,12, cfg.floorCol); fl.position.set(0,fy-0.1,0); g.add(fl);
+  const ce = box(12,0.2,12, cfg.ceilCol);  ce.position.set(0,fy+3.1,0); g.add(ce);
+  [
+    [12,3.2,0.2,  0,  fy+1.5,-6],
+    [12,3.2,0.2,  0,  fy+1.5, 6],
+    [0.2,3.2,12, -6,  fy+1.5, 0],
+    [0.2,3.2,12,  6,  fy+1.5, 0],
+  ].forEach(([w,h,d,x,y,z]) => {
+    const w_ = box(w,h,d,cfg.wallCol); w_.position.set(x,y,z); g.add(w_);
+  });
+
+  const amb = new THREE.AmbientLight(cfg.ambCol, cfg.ambInt); g.add(amb);
+  const pl  = new THREE.PointLight(cfg.lightCol, cfg.lightInt, 16);
+  pl.position.set(0, fy+2.5, 0); g.add(pl);
+  // Corner accent light
+  const pl2 = new THREE.PointLight(cfg.lightCol, 0.4, 8);
+  pl2.position.set(-4, fy+2, -4); g.add(pl2);
+
+  return {g, fy};
+}
+
+// Stair helper
+function addStair(g, fi, fy, direction) {
+  const col = direction==='up' ? 0x223366 : 0x553322;
+  const em  = direction==='up' ? 0x1122aa : 0x992211;
+  const z   = direction==='up' ? -5.7 : 5.7;
+  const s = box(1.5,0.6,0.3, col, em, 0.3);
+  s.position.set(0, fy+0.3, z); g.add(s);
+  const label = direction==='up' ? 'Go to Next Room' : 'Go to Previous Room';
+  const id    = direction==='up' ? 'up'+fi : 'down'+fi;
+  interactables.push({mesh:s, fi, action:'stairs', id, label});
+  // glow bar above
+  const bar = box(1.3,0.05,0.05, em, em, 1.0);
+  bar.position.set(0, fy+0.65, z); g.add(bar);
+}
+
+// Key helper
+function addKey(g, fi, fy, x, z) {
+  const k = sphere(0.22, 0xffd700, 0xffaa00, 0.8);
+  k.position.set(x, fy+0.55, z); g.add(k);
+  interactables.push({mesh:k, fi, action:'key', id:fi, label:'Pick up Key'});
+  animMeshes.push({mesh:k, type:'key', fi, id:fi});
+  return k;
+}
+
+// Puzzle box helper
+function addPuzzleBox(g, fi, fy, x, z, col, em) {
+  const pb = box(0.7,0.7,0.7, col, em, 0.5);
+  pb.position.set(x, fy+0.5, z); g.add(pb);
+  interactables.push({mesh:pb, fi, action:'puzzle', id:fi, label:'Solve Puzzle'});
+  animMeshes.push({mesh:pb, type:'puzzle', fi, id:fi});
+  return pb;
+}
+
+// Trap helper
+function addTrap(g, fi, fy, x, z, col, em) {
+  const t = cyl(0.42,0.1, col, em, 0.9);
+  t.position.set(x, fy+0.05, z); g.add(t);
+  traps.push({mesh:t, fi, radius:0.52});
+  animMeshes.push({mesh:t, type:'trap', fi, id:traps.length-1});
+  return t;
+}
+
+// Clue object
+function addClue(g, fi, fy, x, z, col, label, msg) {
+  const c = box(0.5,1.2,0.4, col, col, 0.15);
+  c.position.set(x, fy+0.6, z); g.add(c);
+  interactables.push({mesh:c, fi, action:'clue', id:fi, label:'Read '+label, clueMsg:msg});
+}
+
+// ===================== BUILD ALL 6 ROOMS =====================
+
+// --- ROOM 1: The Dungeon ---
+{
+  const {g,fy} = buildBaseRoom(0);
+  addKey(g,0,fy, -3,-3);
+  addPuzzleBox(g,0,fy, 3,-3, 0x2255cc, 0x1133aa);
+  addTrap(g,0,fy, 2,2, 0xff2200, 0xff0000);
+  addTrap(g,0,fy,-2,-2, 0xff2200, 0xff0000);
+  addClue(g,0,fy,-4.5,0, 0x2a2a60,'Rune Wall','Rune Wall: "The sum of the first four prime numbers will open the gate."');
+  // Pillars
+  [[-4,fy+1.5,-4],[4,fy+1.5,-4]].forEach(([x,y,z])=>{
+    const p=box(0.5,3,0.5,0x151535,0x2244cc,0.08); p.position.set(x,y,z); g.add(p);
+  });
+  addStair(g,0,fy,'up');
+  scene.add(g); floorGroups.push(g);
+}
+
+// --- ROOM 2: Lava Cavern ---
+{
+  const {g,fy} = buildBaseRoom(1);
+  addKey(g,1,fy, 3,3);
+  addPuzzleBox(g,1,fy,-3,3, 0xcc4400, 0xaa2200);
+  addTrap(g,1,fy,0,0,   0xff4400,0xff2200);
+  addTrap(g,1,fy,2,-2,  0xff4400,0xff2200);
+  addTrap(g,1,fy,-2,2,  0xff4400,0xff2200);
+  addClue(g,1,fy,4.5,-2,0x3a1500,'Scorched Tablet','Scorched Tablet: "In the sequence RED, ORANGE, YELLOW — which comes first? That color rules the sequence."');
+  // Lava cracks (decorative strips)
+  [[-3,0],[0,2],[3,-1]].forEach(([x,z])=>{
+    const lv=box(0.15,0.03,2, 0xff4400,0xff2200,1.0); lv.position.set(x,fy+0.02,z); g.add(lv);
+  });
+  addStair(g,1,fy,'down');
+  addStair(g,1,fy,'up');
+  scene.add(g); floorGroups.push(g);
+}
+
+// --- ROOM 3: Ice Prison ---
+{
+  const {g,fy} = buildBaseRoom(2);
+  addKey(g,2,fy,-3,3);
+  addPuzzleBox(g,2,fy,3,3, 0x0088cc, 0x0044aa);
+  addTrap(g,2,fy,-1,1, 0x00ccff,0x0088ff);
+  addTrap(g,2,fy,1,-1, 0x00ccff,0x0088ff);
+  addTrap(g,2,fy,3,0,  0x00ccff,0x0088ff);
+  addClue(g,2,fy,-4.5,2,0x0a1e33,'Frost Inscription','Frost Inscription: "Temperature of absolute zero in Celsius, drop the minus sign."');
+  // Ice columns
+  [[-3,fy+1.5,2],[3,fy+1.5,2],[-3,fy+1.5,-4]].forEach(([x,y,z])=>{
+    const ic=box(0.4,3,0.4, 0x0a2233,0x44ccff,0.06); ic.position.set(x,y,z); g.add(ic);
+  });
+  addStair(g,2,fy,'down');
+  addStair(g,2,fy,'up');
+  scene.add(g); floorGroups.push(g);
+}
+
+// --- ROOM 4: Poison Lab ---
+{
+  const {g,fy} = buildBaseRoom(3);
+  addKey(g,3,fy,3,-3);
+  addPuzzleBox(g,3,fy,-3,-3, 0x22aa33, 0x008822);
+  addTrap(g,3,fy, 0, 2, 0x00ff44,0x00cc33);
+  addTrap(g,3,fy,-2,-1, 0x00ff44,0x00cc33);
+  addTrap(g,3,fy, 2, 1, 0x00ff44,0x00cc33);
+  addTrap(g,3,fy,-1,-3, 0x00ff44,0x00cc33);
+  addClue(g,3,fy,4.5,1, 0x0a1e0a,'Lab Journal','Lab Journal: "Formula R-G-R-G: the pattern of two colors, alternating. Enter the 4th element."');
+  // Beakers (decorative cones)
+  [[1.5,fy+0.6,-4.5],[-2,fy+0.6,-4.5]].forEach(([x,y,z])=>{
+    const bk=cone(0.18,0.7, 0x224422,0x00ff44,0.3); bk.position.set(x,y,z); g.add(bk);
+  });
+  addStair(g,3,fy,'down');
+  addStair(g,3,fy,'up');
+  scene.add(g); floorGroups.push(g);
+}
+
+// --- ROOM 5: Haunted Library ---
+{
+  const {g,fy} = buildBaseRoom(4);
+  addKey(g,4,fy,-2,2);
+  addPuzzleBox(g,4,fy,2,-3, 0x6622aa, 0x4400aa);
+  addTrap(g,4,fy,0,0,   0xcc44ff,0x8800ff);
+  addTrap(g,4,fy,3,3,   0xcc44ff,0x8800ff);
+  addTrap(g,4,fy,-3,-3, 0xcc44ff,0x8800ff);
+  addTrap(g,4,fy,3,-3,  0xcc44ff,0x8800ff);
+  addClue(g,4,fy,-5,0, 0x1a0a2e,'Ancient Tome','Ancient Tome: "The witch hid the answer on shelf #7. Multiply the shelf number by the number of deadly sins."');
+  // Bookshelves
+  [[-4.5,fy+1.5,-3],[4.5,fy+1.5,0]].forEach(([x,y,z])=>{
+    const sh=box(0.25,2.5,1.5, 0x1a0d33,0x5500cc,0.07); sh.position.set(x,y,z); g.add(sh);
+  });
+  addStair(g,4,fy,'down');
+  addStair(g,4,fy,'up');
+  scene.add(g); floorGroups.push(g);
+}
+
+// --- ROOM 6: Final Chamber ---
+{
+  const {g,fy} = buildBaseRoom(5);
+  addKey(g,5,fy,0,-2);
+  addPuzzleBox(g,5,fy,3,3, 0xaa1122, 0x880011);
+  addTrap(g,5,fy,-2,0,  0xff0033,0xcc0022);
+  addTrap(g,5,fy, 2,0,  0xff0033,0xcc0022);
+  addTrap(g,5,fy,0,2,   0xff0033,0xcc0022);
+  addTrap(g,5,fy,-2,-3, 0xff0033,0xcc0022);
+  addTrap(g,5,fy, 2,-3, 0xff0033,0xcc0022);
+  addClue(g,5,fy,-5,0, 0x2e0505,'Blood Prophecy','Blood Prophecy: "The number of rooms you have conquered — plus the number of your remaining lives at the start."');
+  // Exit door (glowing green frame)
+  const exitFrame = box(1.8,2.8,0.15, 0x00ff44,0x00ff44,1.0);
+  exitFrame.position.set(0,fy+1.4,-5.82); g.add(exitFrame);
+  const exitDoor = box(1.5,2.4,0.22, 0x115522,0x00aa00,0.5);
+  exitDoor.position.set(0,fy+1.2,-5.75); g.add(exitDoor);
+  interactables.push({mesh:exitDoor, fi:5, action:'exit', id:0, label:'USE EXIT — Escape!'});
+  // Pillars of doom
+  [[-4,fy+1.5,-4],[4,fy+1.5,-4],[-4,fy+1.5,4],[4,fy+1.5,4]].forEach(([x,y,z])=>{
+    const p=box(0.5,3,0.5,0x1e0505,0xff1133,0.06); p.position.set(x,y,z); g.add(p);
+  });
+  addStair(g,5,fy,'down');
+  scene.add(g); floorGroups.push(g);
+}
+
+// Show room 1
+floorGroups[0].visible = true;
+applyFog(0);
+
+// ===================== FOG PER ROOM =====================
+function applyFog(fi) {
+  const cfg = ROOM_CONFIGS[fi];
+  scene.fog = new THREE.Fog(cfg.fogCol, cfg.fogNear, cfg.fogFar);
+  scene.background = new THREE.Color(cfg.fogCol);
+}
+
+// ===================== RAYCASTER =====================
+const raycaster = new THREE.Raycaster();
+const INTERACT_DIST = 3.5;
+
+// ===================== HUD / MESSAGES =====================
+let msgTimer=null;
+function showMsg(text, color='#fff', dur=2800) {
+  const el=document.getElementById('msg');
+  el.textContent=text; el.style.color=color; el.style.opacity=1;
+  clearTimeout(msgTimer);
+  msgTimer=setTimeout(()=>el.style.opacity=0, dur);
+}
+function updateHUD() {
+  const fi=floor-1;
+  document.getElementById('hud-keys').textContent  = '🗝 Keys: '+keys.filter(Boolean).length+' / 6';
+  document.getElementById('hud-floor').textContent = '📍 Room: '+floor+' / 6';
+  document.getElementById('hud-hp').textContent    = '❤️ HP: '+hp+' / '+maxHp;
+  document.getElementById('hud-room').textContent  = ROOM_CONFIGS[fi].name;
+  updateMinimap();
+}
+function updateMinimap() {
+  const mm=document.getElementById('minimap');
+  let html='<div style="color:#666;font-size:10px;margin-bottom:4px;">ROOMS</div>';
+  for(let i=0;i<TOTAL_FLOORS;i++){
+    const active = (i===floor-1);
+    const done   = keys[i];
+    html+=`<div class="fl"><div class="dot ${active?'active':done?'done':''}"></div><span style="font-size:10px;color:${active?'#88aaff':done?'#44cc44':'#555'}">${ROOM_CONFIGS[i].name}</span></div>`;
+  }
+  mm.innerHTML=html;
+}
+
+// ===================== COLLECT KEY =====================
+function collectKey(id) {
+  if(keys[id]){showMsg('Already collected!','#aaa');return;}
+  keys[id]=true;
+  const it=interactables.find(i=>i.action==='key'&&i.id===id);
+  if(it) it.mesh.visible=false;
+  updateHUD();
+  showMsg('🗝 Key '+(id+1)+' collected! ('+keys.filter(Boolean).length+'/6)','#ffd700',3000);
+}
+
+function getFloorY(){return (floor-1)*5;}
+
+function goFloor(n){
+  if(n<1||n>TOTAL_FLOORS) return;
+  floorGroups[floor-1].visible=false;
+  floor=n;
+  floorGroups[floor-1].visible=true;
+  applyFog(floor-1);
+  camera.position.set(0, getFloorY()+1.7, 0);
+  updateHUD();
+  showMsg('Entered: '+ROOM_CONFIGS[floor-1].name,'#aaaaff',2500);
+}
+
+// ===================== PUZZLES =====================
+const PUZZLES = [
+  // Room 1: Dungeon — sum of first 4 primes
+  {
+    title:'🔵 Room 1 — Gate Cipher',
+    desc:'The rune wall outside says:\n"The sum of the first four prime numbers will open the gate."',
+    type:'number', answer:'17', keyId:0,
+    hint:'2 + 3 + 5 + 7 = ?'
+  },
+  // Room 2: Lava — color sequence (first color = RED)
+  {
+    title:'🔴 Room 2 — Flame Sequence',
+    desc:'The scorched tablet reads:\n"RED, ORANGE, YELLOW — press the first in the sequence."',
+    type:'mcq',
+    opts:['🔴 Red','🟠 Orange','🟡 Yellow','🟢 Green'],
+    answer:'0', keyId:1,
+    hint:'The tablet lists RED first.'
+  },
+  // Room 3: Ice — absolute zero = 273
+  {
+    title:'🔵 Room 3 — Frost Code',
+    desc:'The frost inscription reads:\n"Temperature of absolute zero in Celsius — drop the minus sign."',
+    type:'number', answer:'273', keyId:2,
+    hint:'Absolute zero = −273°C → enter 273'
+  },
+  // Room 4: Poison — 4th element of R-G-R-G is G
+  {
+    title:'🟢 Room 4 — Toxin Pattern',
+    desc:'The lab journal reads:\n"Pattern: R-G-R-G — enter the color of the 4th element."',
+    type:'mcq',
+    opts:['🔴 Red','🟢 Green','🔵 Blue','🟡 Yellow'],
+    answer:'1', keyId:3,
+    hint:'R(1) G(2) R(3) G(4) → 4th = Green'
+  },
+  // Room 5: Library — shelf 7 × 7 deadly sins = 49
+  {
+    title:'🟣 Room 5 — Witch\'s Shelf',
+    desc:'The ancient tome:\n"The witch hid the answer on shelf #7.\nMultiply the shelf number by the number of deadly sins."',
+    type:'number', answer:'49', keyId:4,
+    hint:'7 shelves × 7 deadly sins = 49'
+  },
+  // Room 6: Final — rooms(6) + starting hp(5) = 11
+  {
+    title:'🔴 Room 6 — Blood Prophecy',
+    desc:'The blood prophecy reads:\n"The number of rooms you conquered, plus the number of your lives at the start."',
+    type:'number', answer:'11', keyId:5,
+    hint:'6 rooms + 5 starting HP = 11'
+  },
+];
+
+function openPuzzle(id) {
+  if(puzzleSolved[id]){showMsg('Already solved!','#aaa');return;}
+  const p=PUZZLES[id];
+  activePuzzle=p;
+  document.getElementById('p-title').textContent=p.title;
+  document.getElementById('p-desc').textContent=p.desc;
+  document.getElementById('puzzle-feedback').textContent='';
+  mathSelected=null;
+  const content=document.getElementById('p-content');
+  if(p.type==='number'){
+    content.innerHTML=`<input type="text" id="pz-input" maxlength="6" placeholder="Enter code" autocomplete="off">`;
+    setTimeout(()=>document.getElementById('pz-input')?.focus(),80);
+  } else if(p.type==='mcq'){
+    content.innerHTML=`<div class="math-opts">${p.opts.map((o,i)=>`<div class="math-opt" data-i="${i}" onclick="selectOpt(this,${i})">${o}</div>`).join('')}</div>`;
+  } else if(p.type==='seq'){
+    seqInput='';
+    content.innerHTML=`
+      <div class="seq-btns">
+        <button class="seq-btn" style="border-color:#f55;" onclick="seqPress('r')">🔴</button>
+        <button class="seq-btn" style="border-color:#5f5;" onclick="seqPress('g')">🟢</button>
+        <button class="seq-btn" style="border-color:#55f;" onclick="seqPress('s')">🔵</button>
+      </div>
+      <div id="seq-disp">_</div>`;
+  }
+  document.getElementById('puzzle-modal').style.display='flex';
+  document.getElementById('p-submit').onclick=submitPuzzle;
+  gameStarted=false;
+}
+
+function selectOpt(el, i) {
+  document.querySelectorAll('.math-opt').forEach(e=>e.classList.remove('selected'));
+  el.classList.add('selected');
+  mathSelected=String(i);
+}
+
+function seqPress(v) {
+  if(seqInput.length>=activePuzzle.seqLen) return;
+  seqInput+=v;
+  const icons={r:'🔴',g:'🟢',s:'🔵'};
+  document.getElementById('seq-disp').textContent=seqInput.split('').map(c=>icons[c]||c).join(' ');
+}
+
+function submitPuzzle(){
+  const p=activePuzzle; if(!p) return;
+  let input='';
+  if(p.type==='number') input=(document.getElementById('pz-input')?.value||'').trim();
+  else if(p.type==='mcq') input=mathSelected||'';
+  else if(p.type==='seq') input=seqInput;
+  const fb=document.getElementById('puzzle-feedback');
+  if(input===p.answer){
+    fb.textContent='✅ Correct! Key unlocked.'; fb.style.color='#44ff44';
+    puzzleSolved[p.keyId]=true;
+    setTimeout(()=>{closePuzzle();collectKey(p.keyId);},900);
+  } else {
+    fb.textContent='❌ Wrong. Hint: '+p.hint; fb.style.color='#ff5555';
+    mathSelected=null;
+    document.querySelectorAll('.math-opt').forEach(e=>e.classList.remove('selected'));
+    seqInput='';
+    if(document.getElementById('seq-disp')) document.getElementById('seq-disp').textContent='_';
+  }
+}
+
+function closePuzzle(){
+  document.getElementById('puzzle-modal').style.display='none';
+  activePuzzle=null;
+  gameStarted=true;
+}
+
+// ===================== INTERACT =====================
+function interact(){
+  if(dead||won||!gameStarted||activePuzzle) return;
+  if(!nearbyInteractable) return;
+  const it=nearbyInteractable;
+  if(it.action==='key') collectKey(it.id);
+  else if(it.action==='puzzle') openPuzzle(it.id);
+  else if(it.action==='clue') showMsg(it.clueMsg||'Nothing here','#ffdd88',5000);
+  else if(it.action==='stairs'){
+    const id=it.id;
+    if(id.startsWith('up'))   goFloor(floor+1);
+    if(id.startsWith('down')) goFloor(floor-1);
+  }
+  else if(it.action==='exit'){
+    const collected=keys.filter(Boolean).length;
+    if(collected>=6){ won=true; gameStarted=false; showEndScreen('win'); }
+    else showMsg('Need all 6 keys! ('+collected+'/6 collected)','#ff6666',3000);
+  }
+}
+
+// ===================== TRAPS =====================
+let trapCooldown=false;
+function checkTraps(){
+  if(dead||won||trapCooldown) return;
+  const fi=floor-1;
+  for(const t of traps){
+    if(t.fi!==fi||!t.mesh.visible) continue;
+    const tp=t.mesh.position;
+    const dx=camera.position.x-tp.x;
+    const dz=camera.position.z-tp.z;
+    if(Math.sqrt(dx*dx+dz*dz)<t.radius+0.28){
+      hp=Math.max(0,hp-1);
+      updateHUD();
+      showMsg('⚠️ Trap! -1 HP  ('+hp+' left)','#ff4444');
+      trapCooldown=true;
+      setTimeout(()=>trapCooldown=false,1800);
+      camera.position.x+=dx*1.8;
+      camera.position.z+=dz*1.8;
+      if(hp<=0){dead=true;gameStarted=false;showEndScreen('lose');}
+      break;
+    }
+  }
+}
+
+// ===================== END SCREENS =====================
+function showEndScreen(type){
+  const ov=document.getElementById('overlay');
+  ov.style.display='flex';
+  if(type==='win'){
+    ov.innerHTML=`
+      <div class="icon">🏆</div>
+      <h1 style="color:#ffd700">ESCAPED!</h1>
+      <div class="sub">You conquered all 6 rooms</div>
+      <div class="story">6 keys collected. 6 puzzles solved.<br>You are free — for now.</div>
+      <button onclick="location.reload()">▶ Play Again</button>`;
+  } else {
+    ov.innerHTML=`
+      <div class="icon">💀</div>
+      <h1 style="color:#ff4444">YOU DIED</h1>
+      <div class="sub">The traps claimed you</div>
+      <div class="story">HP reached zero.<br>The dungeon keeps another soul...</div>
+      <button onclick="location.reload()">▶ Try Again</button>`;
+  }
+}
+
+function startGame(){
+  document.getElementById('overlay').style.display='none';
+  gameStarted=true;
+  camera.position.set(0,1.7,4);
+  updateHUD();
+  showMsg('Room 1: The Dungeon — find the key, solve the puzzle!','#aaffaa',4000);
+}
+
+// ===================== ANIMATION =====================
+const clock=new THREE.Clock();
+
+function animateScene(t){
+  const fi=floor-1;
+  // Keys float and spin
+  animMeshes.forEach(am=>{
+    if(am.type==='key'&&am.fi===fi){
+      const it=interactables.find(i=>i.action==='key'&&i.id===am.id);
+      if(it&&it.mesh.visible){
+        am.mesh.position.y=fi*5+0.55+Math.sin(t*2+am.id*1.3)*0.13;
+        am.mesh.rotation.y=t*1.8;
+      }
+    }
+    if(am.type==='puzzle'&&am.fi===fi&&!puzzleSolved[am.id]){
+      am.mesh.rotation.y=t*0.9;
+      am.mesh.material.emissiveIntensity=0.35+Math.sin(t*2.5+am.id)*0.2;
+    }
+    if(am.type==='trap'&&am.fi===fi){
+      am.mesh.material.emissiveIntensity=0.6+Math.sin(t*4+am.id*0.7)*0.4;
+    }
+  });
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(!gameStarted){renderer.render(scene,camera);return;}
+
+  const dt=Math.min(clock.getDelta(),0.05);
+  const t=clock.getElapsedTime();
+
+  // Camera orientation
+  camera.rotation.order='YXZ';
+  camera.rotation.y=yaw;
+  camera.rotation.x=pitch;
+
+  // Movement
+  const speed=4.5*dt;
+  const fwd  =new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+  const right =new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+  const dir  =new THREE.Vector3();
+  if(moveState.w) dir.addScaledVector(fwd,speed);
+  if(moveState.s) dir.addScaledVector(fwd,-speed);
+  if(moveState.a) dir.addScaledVector(right,-speed);
+  if(moveState.d) dir.addScaledVector(right,speed);
+  camera.position.add(dir);
+  camera.position.x=Math.max(-5.4,Math.min(5.4,camera.position.x));
+  camera.position.z=Math.max(-5.4,Math.min(5.4,camera.position.z));
+  camera.position.y=getFloorY()+1.7;
+
+  // Interaction detection
+  const fwdDir=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  raycaster.set(camera.position,fwdDir);
+  const fi=floor-1;
+  const meshList=interactables.filter(i=>i.fi===fi&&i.mesh.visible!==false).map(i=>i.mesh);
+  const hits=raycaster.intersectObjects(meshList);
+  if(hits.length&&hits[0].distance<INTERACT_DIST){
+    nearbyInteractable=interactables.find(i=>i.mesh===hits[0].object&&i.fi===fi);
+    const hint=document.getElementById('interact-hint');
+    hint.style.display='block';
+    hint.textContent='Press E — '+(nearbyInteractable?.label||'Interact');
+  } else {
+    nearbyInteractable=null;
+    document.getElementById('interact-hint').style.display='none';
+  }
+
+  checkTraps();
+  animateScene(t);
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
